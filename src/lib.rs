@@ -253,9 +253,53 @@ pub fn sign(privkey: &[u8], msg: &[u8]) -> Result<Vec<u8>, InvalidLengthError> {
 /// This function returns `Ok(true)` if the signature is valid, `Ok(false)` if it is not, or
 /// an `Error(InvalidLengthError)` if `pubkey` or `sig` are of incorrect length.
 pub fn verify(pubkey: &[u8], msg: &[u8], sig: &[u8]) -> Result<bool, InvalidLengthError> {
-    // This is defined in §3.8.
-    #![allow(unused_variables)]
-    unimplemented!();
+    if pubkey.len() != PARAMETER_N {
+        return Err(InvalidLengthError::new("pubkey", PARAMETER_N, pubkey.len()));
+    }
+    if sig.len() != PARAMETER_M * PARAMETER_P {
+        return Err(InvalidLengthError::new("sig", PARAMETER_M*PARAMETER_P, pubkey.len()));
+    }
+
+    // V = ( H(message) || C(H(message)) )
+    let mut h_m = [0; PARAMETER_N];
+    let mut hasher = PARAMETER_H::new();
+    assert_eq!(hasher.output_bytes(), PARAMETER_N);
+    hasher.input(msg);
+    hasher.result(&mut h_m);
+    let mut v = [0; PARAMETER_N+2];
+    {
+        let (left, mut right) = v.split_at_mut(PARAMETER_N);
+        left.copy_from_slice(&h_m);
+        right.write_u16::<BigEndian>(checksum(&h_m)).unwrap();
+    }
+
+    let mut inner_hasher = PARAMETER_F::new();
+    let mut outer_hasher = PARAMETER_H::new();
+    for (i, z_i_) in sig.chunks(PARAMETER_M).enumerate() {
+        let a = 2u8.pow(PARAMETER_W as u32) - 1 - coef(&v, i, PARAMETER_W);
+        let mut z_i = [0; PARAMETER_M];
+        z_i.copy_from_slice(z_i_.split_at(PARAMETER_M).0);
+        for _ in 0..a {
+            inner_hasher.reset();
+            inner_hasher.input(&z_i);
+            let mut z_i_long = [0; PARAMETER_N];
+            inner_hasher.result(&mut z_i_long);
+            z_i.copy_from_slice(z_i_long.split_at(PARAMETER_M).0);
+        }
+        println!("{}: {}", i, util::format_bytes(&z_i));
+        outer_hasher.input(&z_i);
+    }
+
+    let mut hash = [0; PARAMETER_N];
+    outer_hasher.result(&mut hash);
+
+    println!("{}\n{}", util::format_bytes(&hash), util::format_bytes(&pubkey));
+
+    if hash == pubkey {
+        Ok(true)
+    } else {
+        Ok(false)
+    }
 }
 
 pub mod util {
