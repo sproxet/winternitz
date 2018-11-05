@@ -145,11 +145,12 @@ fn checksum(msg_hash: &[u8]) -> u16 {
 ///
 /// # Arguments
 ///
-/// * `privkey` is private entropy that must have length of `PARAMETER_P * PARAMETER_N`
+/// * `privkey` is private entropy that must have length of `PRIVKEY_SIZE`
+/// * `pubkey` is a mutable slice of size `PUBKEY_SIZE`, which we will clobber with the public key
 ///
 /// # Returns
 ///
-/// This function returns the generated public key `Ok(Vec<u8>)` on success, or an
+/// This function returns the generated public key `Ok(())` on success, or an
 /// `Error(InvalidLengthError)` if `privkey` is of incorrect length.
 pub fn derive_pubkey(privkey: &[u8], pubkey: &mut [u8]) -> Result<(), InvalidLengthError> {
     // This is defined in §3.5.
@@ -198,8 +199,9 @@ pub fn derive_pubkey(privkey: &[u8], pubkey: &mut [u8]) -> Result<(), InvalidLen
 ///
 /// # Arguments
 ///
-/// * `privkey` is private entropy that must have length of `PARAMETER_P * PARAMETER_N`
+/// * `privkey` is private entropy that must have length of `PRIVKEY_SIZE`
 /// * `msg` is the message to be signed. It may have any length.
+/// * `sig` is a mutable slice of size `SIG_SIZE`, which we will clobber with the signature
 ///
 /// # Danger
 ///
@@ -208,8 +210,8 @@ pub fn derive_pubkey(privkey: &[u8], pubkey: &mut [u8]) -> Result<(), InvalidLen
 ///
 /// # Returns
 ///
-/// This function returns the signature `Ok(Vec<u8>)` on success, or an
-/// `Error(InvalidLengthError)` if `privkey` is of an incorrect length.
+/// This function returns the signature `Ok(())` on success, or an `Error(InvalidLengthError)`
+/// if `privkey` is of an incorrect length.
 pub fn sign(privkey: &[u8], msg: &[u8], sig: &mut [u8]) -> Result<(), InvalidLengthError> {
     if privkey.len() != PRIVKEY_SIZE {
         return Err(InvalidLengthError::new("privkey", PRIVKEY_SIZE, privkey.len()));
