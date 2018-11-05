@@ -1,9 +1,12 @@
 // Section numbers refer to https://tools.ietf.org/html/draft-mcgrew-hash-sigs-02
 
 extern crate crypto;
+extern crate byteorder;
 
 use std::error::Error;
 use std::fmt;
+
+use byteorder::{BigEndian, WriteBytesExt};
 
 use crypto::digest::Digest;
 use crypto::sha2::Sha256;
@@ -199,9 +202,42 @@ pub fn derive_pubkey(privkey: &[u8]) -> Result<Vec<u8>, InvalidLengthError> {
 /// This function returns the signature `Ok(Vec<u8>)` on success, or an
 /// `Error(InvalidLengthError)` if `privkey` is of an incorrect length.
 pub fn sign(privkey: &[u8], msg: &[u8]) -> Result<Vec<u8>, InvalidLengthError> {
-    // This is defined in §3.7.
-    #![allow(unused_variables)]
-    unimplemented!();
+    if privkey.len() != PARAMETER_P * PARAMETER_N {
+        return Err(InvalidLengthError::new("privkey", PARAMETER_P*PARAMETER_N, privkey.len()));
+    }
+
+    assert!(PARAMETER_N >= PARAMETER_M);
+
+    // V = ( H(message) || C(H(message)) )
+    let mut h_m = [0; PARAMETER_N];
+    let mut hasher = PARAMETER_H::new();
+    assert_eq!(hasher.output_bytes(), PARAMETER_N);
+    hasher.input(msg);
+    hasher.result(&mut h_m);
+    let mut v = [0; PARAMETER_N+2];
+    {
+        let (left, mut right) = v.split_at_mut(PARAMETER_N);
+        left.copy_from_slice(&h_m);
+        right.write_u16::<BigEndian>(checksum(&h_m)).unwrap();
+    }
+
+    let mut hasher = PARAMETER_F::new();
+    let mut result = Vec::new();
+    for (i, y_i_long) in privkey.chunks(PARAMETER_N).enumerate() {
+        let a = coef(&v, i, PARAMETER_W);
+        let mut y_i = [0; PARAMETER_M];
+        y_i.copy_from_slice(y_i_long.split_at(PARAMETER_M).0);
+        for _ in 0..a {
+            hasher.reset();
+            hasher.input(&y_i);
+            let mut y_i_long = [0; PARAMETER_N];
+            hasher.result(&mut y_i_long);
+            y_i.copy_from_slice(y_i_long.split_at(PARAMETER_M).0);
+        }
+        result.extend_from_slice(&y_i);
+    }
+
+    Ok(result)
 }
 
 /// Verify a signature `sig` of message `msg` from public key `pubkey`.
