@@ -145,13 +145,17 @@ fn checksum(msg_hash: &[u8]) -> u16 {
 ///
 /// This function returns the generated public key `Ok(Vec<u8>)` on success, or an
 /// `Error(InvalidLengthError)` if `privkey` is of incorrect length.
-pub fn derive_pubkey(privkey: &[u8]) -> Result<Vec<u8>, InvalidLengthError> {
+pub fn derive_pubkey(privkey: &[u8], pubkey: &mut [u8]) -> Result<(), InvalidLengthError> {
     // This is defined in §3.5.
 
     assert!(PARAMETER_N >= PARAMETER_M);
 
     if privkey.len() != PARAMETER_P * PARAMETER_N {
         return Err(InvalidLengthError::new("privkey", PARAMETER_P, privkey.len()));
+    }
+
+    if pubkey.len() != PARAMETER_N {
+        return Err(InvalidLengthError::new("pubkey", PARAMETER_N, pubkey.len()));
     }
 
     let mut inner_hasher = PARAMETER_F::new();
@@ -180,9 +184,8 @@ pub fn derive_pubkey(privkey: &[u8]) -> Result<Vec<u8>, InvalidLengthError> {
         outer_hasher.input(&y_i);
     }
 
-    let mut result = vec![0; PARAMETER_N];
-    outer_hasher.result(&mut result);
-    Ok(result)
+    outer_hasher.result(pubkey);
+    Ok(())
 }
 
 /// Sign a message `msg` with `privkey`, returning the signature.
@@ -286,14 +289,11 @@ pub fn verify(pubkey: &[u8], msg: &[u8], sig: &[u8]) -> Result<bool, InvalidLeng
             inner_hasher.result(&mut z_i_long);
             z_i.copy_from_slice(z_i_long.split_at(PARAMETER_M).0);
         }
-        println!("{}: {}", i, util::format_bytes(&z_i));
         outer_hasher.input(&z_i);
     }
 
     let mut hash = [0; PARAMETER_N];
     outer_hasher.result(&mut hash);
-
-    println!("{}\n{}", util::format_bytes(&hash), util::format_bytes(&pubkey));
 
     if hash == pubkey {
         Ok(true)
@@ -401,7 +401,8 @@ mod tests {
     #[test]
     fn test_derive_pubkey() {
         let privkey = deformat_bytes(OTS_PRIVKEY_0).unwrap();
-        let pubkey = derive_pubkey(&privkey).unwrap();
+        let mut pubkey = [0; 32];
+        derive_pubkey(&privkey, &mut pubkey).unwrap();
         // This is OTS Public Key 0 in §B.2 Table 5
         assert_eq!("0x2db55a72075fcfab5aedbef77bf6b371dfb489d6e61ad2884a248345e6910618", format_bytes(&pubkey));
     }
@@ -418,7 +419,8 @@ mod tests {
     #[test]
     fn test_successful_verify() {
         let privkey = deformat_bytes(OTS_PRIVKEY_0).unwrap();
-        let pubkey = derive_pubkey(&privkey).unwrap();
+        let mut pubkey = [0; 32];
+        derive_pubkey(&privkey, &mut pubkey).unwrap();
         let msg = deformat_bytes("0x48656c6c6f20776f726c64210a").unwrap();
         let sig = sign(&privkey, &msg).unwrap();
         assert!(verify(&pubkey, &msg, &sig).unwrap());
