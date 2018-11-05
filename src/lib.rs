@@ -275,10 +275,10 @@ pub fn verify(pubkey: &[u8], msg: &[u8], sig: &[u8]) -> Result<bool, InvalidLeng
 
     let mut inner_hasher = PARAMETER_F::new();
     let mut outer_hasher = PARAMETER_H::new();
-    for (i, z_i_) in sig.chunks(PARAMETER_M).enumerate() {
+    for (i, z_i_long) in sig.chunks(PARAMETER_M).enumerate() {
         let a = 2u8.pow(PARAMETER_W as u32) - 1 - coef(&v, i, PARAMETER_W);
         let mut z_i = [0; PARAMETER_M];
-        z_i.copy_from_slice(z_i_.split_at(PARAMETER_M).0);
+        z_i.copy_from_slice(z_i_long.split_at(PARAMETER_M).0);
         for _ in 0..a {
             inner_hasher.reset();
             inner_hasher.input(&z_i);
