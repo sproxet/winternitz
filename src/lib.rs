@@ -66,6 +66,72 @@ impl Error for InvalidLengthError {
     }
 }
 
+/// This gets the `index`-th value of `msg` split into `bitlength` pieces.
+/// It is described in §2.1.2.
+///
+/// # Panics
+///
+/// This function panics if index is out of bounds, or bitlength is not in the set {1, 2, 4, 8}.
+fn coef(msg: &[u8], index: usize, bitlength: usize) -> u8 {
+    match bitlength {
+        8 => {
+            msg[index]
+        },
+        4 => {
+            let ix = index/2;
+            let byte = msg[ix];
+            match index % 2 {
+                0 => byte >> 4,
+                1 => byte & 0xf,
+                _ => unreachable!(),
+            }
+        },
+        2 => {
+            let ix = index/4;
+            let byte = msg[ix];
+            match index % 4 {
+                0 => byte >> 6,
+                1 => (byte >> 4) & 0x3,
+                2 => (byte >> 2) & 0x3,
+                3 => byte & 0x3,
+                _ => unreachable!(),
+            }
+        },
+        1 => {
+            let ix = index/8;
+            let byte = msg[ix];
+            match index % 8 {
+                0 => byte >> 7,
+                1 => (byte >> 6) & 0x1,
+                2 => (byte >> 5) & 0x1,
+                3 => (byte >> 4) & 0x1,
+                4 => (byte >> 3) & 0x1,
+                5 => (byte >> 2) & 0x1,
+                6 => (byte >> 1) & 0x1,
+                7 => byte & 0x1,
+                _ => unreachable!(),
+            }
+        }
+        _ => unimplemented!()
+    }
+}
+
+/// A checksum is used to ensure that any forgery attempt that manipulates the elements of an
+/// existing signature will be detected.
+/// The security property that it provides is detailed in §8.
+/// The checksum algorithm itself is described in §3.6.
+/// This function will panic! if `msg_hash` is not the right length for `H`'s output.
+fn checksum(msg_hash: &[u8]) -> u16 {
+    assert_eq!(msg_hash.len(), PARAMETER_N);
+
+    let u = 8 * PARAMETER_N / PARAMETER_W; // ceil is unnecessary because of the assertion
+    let mut sum = 0;
+    for i in 0..u {
+        sum = sum + 2u16.pow(PARAMETER_W as u32) - 1 - u16::from(coef(msg_hash, i, PARAMETER_W));
+    }
+    sum << PARAMETER_LS
+}
+
 /// Generate a public key from private entropy `privkey`.
 ///
 /// # Arguments
@@ -170,6 +236,38 @@ pub mod util {
 
         Ok(out)
     }
+}
+
+#[test]
+fn test_coef() {
+    let a = [0x8c, 0x9f, 0xa4, 0xba, 0xa8];
+    assert_eq!(0x8c, coef(&a, 0, 8));
+    assert_eq!(0xa4, coef(&a, 2, 8));
+    assert_eq!(0xa8, coef(&a, 4, 8));
+    assert_eq!(0x08, coef(&a, 0, 4));
+    assert_eq!(0x0f, coef(&a, 3, 4));
+    assert_eq!(0x0a, coef(&a, 7, 4));
+    assert_eq!(0x08, coef(&a, 9, 4));
+    assert_eq!(0b10, coef(&a, 0, 2));
+    assert_eq!(0b11, coef(&a, 2, 2));
+    assert_eq!(0b01, coef(&a, 5, 2));
+    assert_eq!(0b00, coef(&a, 3, 2));
+    assert_eq!(0b01, coef(&a, 0, 1));
+    assert_eq!(0b00, coef(&a, 7, 1));
+    assert_eq!(0b00, coef(&a, 9, 1));
+    assert_eq!(0b01, coef(&a, 5, 1));
+}
+
+#[test]
+fn test_checksum() {
+    let msg = util::deformat_bytes("0x48656c6c6f20776f726c64210a").unwrap();
+    let mut hash = [0; 32];
+    let mut hasher = Sha256::new();
+    hasher.input(&msg);
+    hasher.result(&mut hash);
+    let cs = checksum(&hash);
+    // It looks like PARAMETER_LS is set to 0 in §B.3 where this test case is provided.
+    assert_eq!(cs, 0x1cc << 4);
 }
 
 #[cfg(test)]
