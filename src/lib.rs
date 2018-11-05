@@ -204,9 +204,12 @@ pub fn derive_pubkey(privkey: &[u8], pubkey: &mut [u8]) -> Result<(), InvalidLen
 ///
 /// This function returns the signature `Ok(Vec<u8>)` on success, or an
 /// `Error(InvalidLengthError)` if `privkey` is of an incorrect length.
-pub fn sign(privkey: &[u8], msg: &[u8]) -> Result<Vec<u8>, InvalidLengthError> {
+pub fn sign(privkey: &[u8], msg: &[u8], sig: &mut [u8]) -> Result<(), InvalidLengthError> {
     if privkey.len() != PARAMETER_P * PARAMETER_N {
         return Err(InvalidLengthError::new("privkey", PARAMETER_P*PARAMETER_N, privkey.len()));
+    }
+    if sig.len() != PARAMETER_P * PARAMETER_M {
+        return Err(InvalidLengthError::new("sig", PARAMETER_P*PARAMETER_N, sig.len()));
     }
 
     assert!(PARAMETER_N >= PARAMETER_M);
@@ -225,8 +228,7 @@ pub fn sign(privkey: &[u8], msg: &[u8]) -> Result<Vec<u8>, InvalidLengthError> {
     }
 
     let mut hasher = PARAMETER_F::new();
-    let mut result = Vec::new();
-    for (i, y_i_long) in privkey.chunks(PARAMETER_N).enumerate() {
+    for ((i, y_i_long), sig_i) in privkey.chunks(PARAMETER_N).enumerate().zip(sig.chunks_mut(PARAMETER_M)) {
         let a = coef(&v, i, PARAMETER_W);
         let mut y_i = [0; PARAMETER_M];
         y_i.copy_from_slice(y_i_long.split_at(PARAMETER_M).0);
@@ -237,10 +239,10 @@ pub fn sign(privkey: &[u8], msg: &[u8]) -> Result<Vec<u8>, InvalidLengthError> {
             hasher.result(&mut y_i_long);
             y_i.copy_from_slice(y_i_long.split_at(PARAMETER_M).0);
         }
-        result.extend_from_slice(&y_i);
+        sig_i.copy_from_slice(&y_i);
     }
 
-    Ok(result)
+    Ok(())
 }
 
 /// Verify a signature `sig` of message `msg` from public key `pubkey`.
@@ -412,7 +414,8 @@ mod tests {
         let privkey = deformat_bytes(OTS_PRIVKEY_0).unwrap();
         // This value is given in §B.3 Table 8
         let msg = deformat_bytes("0x48656c6c6f20776f726c64210a").unwrap();
-        let sig = sign(&privkey, &msg).unwrap();
+        let mut sig = vec![0; PARAMETER_P * PARAMETER_M];
+        sign(&privkey, &msg, &mut sig).unwrap();
         assert_eq!(EXPECTED_SIG_A, format_bytes(&sig));
     }
 
@@ -422,7 +425,8 @@ mod tests {
         let mut pubkey = [0; 32];
         derive_pubkey(&privkey, &mut pubkey).unwrap();
         let msg = deformat_bytes("0x48656c6c6f20776f726c64210a").unwrap();
-        let sig = sign(&privkey, &msg).unwrap();
+        let mut sig = vec![0; PARAMETER_P * PARAMETER_M];
+        sign(&privkey, &msg, &mut sig).unwrap();
         assert!(verify(&pubkey, &msg, &sig).unwrap());
     }
 }
