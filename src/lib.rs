@@ -144,8 +144,42 @@ fn checksum(msg_hash: &[u8]) -> u16 {
 /// `Error(InvalidLengthError)` if `privkey` is of incorrect length.
 pub fn derive_pubkey(privkey: &[u8]) -> Result<Vec<u8>, InvalidLengthError> {
     // This is defined in §3.5.
-    #![allow(unused_variables)]
-    unimplemented!();
+
+    assert!(PARAMETER_N >= PARAMETER_M);
+
+    if privkey.len() != PARAMETER_P * PARAMETER_N {
+        return Err(InvalidLengthError::new("privkey", PARAMETER_P, privkey.len()));
+    }
+
+    let mut inner_hasher = PARAMETER_F::new();
+    let mut outer_hasher = PARAMETER_H::new();
+    assert!(inner_hasher.output_bytes() >= PARAMETER_M);
+    assert_eq!(outer_hasher.output_bytes(), PARAMETER_N);
+
+    let e = 2u32.pow(PARAMETER_W as u32) - 1;
+    // for ( i = 0; i < p; i = i + 1 ) {
+    for x_i in privkey.chunks(PARAMETER_N) {
+        let mut y_i = [0; PARAMETER_M];
+        y_i.copy_from_slice(x_i.split_at(PARAMETER_M).0);
+
+        // y[i] = F^e(x[i])
+        for _ in 0..e {
+            inner_hasher.reset();
+
+            let mut y_i_untruncated = [0; PARAMETER_N];
+            inner_hasher.input(&y_i);
+            inner_hasher.result(&mut y_i_untruncated);
+
+            y_i.copy_from_slice(y_i_untruncated.split_at(PARAMETER_M).0);
+        }
+
+        // This corresponds to the y[i] part of H(y[0] || y[1] || ... || y[p-1])
+        outer_hasher.input(&y_i);
+    }
+
+    let mut result = vec![0; PARAMETER_N];
+    outer_hasher.result(&mut result);
+    Ok(result)
 }
 
 /// Sign a message `msg` with `privkey`, returning the signature.
