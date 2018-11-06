@@ -61,6 +61,18 @@ impl InvalidLengthError {
             actual_length: actual_length,
         }
     }
+
+    pub fn variable_name(&self) -> &str {
+        &self.variable_name
+    }
+
+    pub fn expected_length(&self) -> usize {
+        self.expected_length
+    }
+
+    pub fn actual_length(&self) -> usize {
+        self.actual_length
+    }
 }
 
 impl fmt::Display for InvalidLengthError {
