@@ -351,7 +351,11 @@ pub mod util {
     pub fn deformat_bytes(bytestr: &str) -> Result<Vec<u8>, Box<Error>> {
         let mut out = Vec::new();
 
-        if bytestr.len() < 2 || bytestr.len() % 2 != 0 {
+        if bytestr.is_empty() || bytestr == "0x" {
+            return Ok(out);
+        }
+
+        if bytestr.len() % 2 != 0 {
             return Err(From::from("invalid bytestr length"));
         }
 
