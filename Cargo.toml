@@ -3,6 +3,11 @@ name = "winternitz"
 version = "0.1.1"
 authors = ["sproxet <sproxet@users.noreply.github.com>"]
 edition = "2018"
+description = "An implementation of Winternitz one-time signatures"
+license = "MIT"
+homepage = "https://github.com/sproxet/winternitz"
+repository = "https://github.com/sproxet/winternitz"
+documentation = "https://github.com/sproxet/winternitz"
 
 [dependencies]
 rust-crypto = "^0.2"
