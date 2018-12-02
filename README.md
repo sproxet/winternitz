@@ -25,11 +25,11 @@ fn main() {
   winternitz::derive_pubkey(&privkey, &mut pubkey).unwrap();
 
   // Sign a message.
-  let msg: &[u8] = b"squeamish ossifrage";
+  let msg = b"squeamish ossifrage";
   let mut sig = [0; winternitz::SIG_SIZE];
-  winternitz::sign(&privkey, &msg, &mut sig).unwrap();
+  winternitz::sign(&privkey, msg, &mut sig).unwrap();
 
   // Verify a signature.
-  assert!(winternitz::verify(&pubkey, &msg, &sig).unwrap());
+  assert!(winternitz::verify(&pubkey, msg, &sig).unwrap());
 }
 ```
