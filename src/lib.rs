@@ -101,7 +101,7 @@ fn checksum(msg_hash: &[u8]) -> u16 {
     let u = 8 * PARAMETER_N / PARAMETER_W; // ceil is unnecessary because of the assertion
     let mut sum = 0;
     for i in 0..u {
-        sum = sum + 2u16.pow(PARAMETER_W as u32) - 1 - u16::from(coef(msg_hash, i, PARAMETER_W));
+        sum = sum + 2u16.pow(PARAMETER_W as u32) - 1 - (coef(msg_hash, i, PARAMETER_W) as u16);
     }
     sum << (PARAMETER_LS as u16)
 }
