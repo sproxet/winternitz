@@ -154,6 +154,11 @@ pub fn derive_pubkey(privkey: &[u8], pubkey: &mut [u8]) -> Result<(), &'static s
 
         // This corresponds to the y[i] part of H(y[0] || y[1] || ... || y[p-1])
         outer_hasher.input(&y_i);
+
+        // PoQua compatibility
+        if cfg!(feature="poqua-token") {
+            outer_hasher.input(&[0; 32 - PARAMETER_M]);
+        }
     }
 
     outer_hasher.result(pubkey);
@@ -265,6 +270,11 @@ pub fn verify(pubkey: &[u8], msg: &[u8], sig: &[u8]) -> Result<bool, &'static st
             z_i.copy_from_slice(z_i_long.split_at(PARAMETER_M).0);
         }
         outer_hasher.input(&z_i);
+
+        // PoQua compatibility
+        if cfg!(feature="poqua-token") {
+            outer_hasher.input(&[0; 32 - PARAMETER_M]);
+        }
     }
 
     let mut hash = [0; PARAMETER_N];
@@ -378,6 +388,7 @@ mod tests {
     ;
 
     #[test]
+    #[cfg(not(feature="poqua-token"))]
     fn test_derive_pubkey() {
         let privkey = deformat_bytes(OTS_PRIVKEY_0).unwrap();
         let mut pubkey = [0; PUBKEY_SIZE];
@@ -387,6 +398,7 @@ mod tests {
     }
 
     #[test]
+    #[cfg(not(feature="poqua-token"))]
     fn test_sign() {
         let privkey = deformat_bytes(OTS_PRIVKEY_0).unwrap();
         // This value is given in §B.3 Table 8
