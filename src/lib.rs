@@ -3,9 +3,6 @@
 extern crate crypto;
 extern crate byteorder;
 
-use std::error::Error;
-use std::fmt;
-
 use byteorder::{BigEndian, WriteBytesExt};
 
 use crypto::digest::Digest;
@@ -42,50 +39,6 @@ pub const PUBKEY_SIZE: usize = PARAMETER_N;
 pub const PRIVKEY_SIZE: usize = PARAMETER_P * PARAMETER_N;
 /// The size (in bytes) of a signature
 pub const SIG_SIZE: usize = PARAMETER_P * PARAMETER_M;
-
-/// `InvalidLengthError` is raised when an argument to a function is of incorrect length.
-#[derive(Debug)]
-pub struct InvalidLengthError {
-    msg: String,
-    variable_name: String,
-    expected_length: usize,
-    actual_length: usize
-}
-
-impl InvalidLengthError {
-    fn new(variable_name: &str, expected_length: usize, actual_length: usize) -> Self {
-        Self {
-            msg: format!("{} was expected to be of length {}, but is actually of length {}", variable_name, expected_length, actual_length),
-            variable_name: variable_name.to_owned(),
-            expected_length: expected_length,
-            actual_length: actual_length,
-        }
-    }
-
-    pub fn variable_name(&self) -> &str {
-        &self.variable_name
-    }
-
-    pub fn expected_length(&self) -> usize {
-        self.expected_length
-    }
-
-    pub fn actual_length(&self) -> usize {
-        self.actual_length
-    }
-}
-
-impl fmt::Display for InvalidLengthError {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "{}", self.msg)
-    }
-}
-
-impl Error for InvalidLengthError {
-    fn description(&self) -> &str {
-        &self.msg
-    }
-}
 
 /// This gets the `index`-th value of `msg` split into `bitlength` pieces.
 /// It is described in §2.1.2.
@@ -150,7 +103,7 @@ fn checksum(msg_hash: &[u8]) -> u16 {
     for i in 0..u {
         sum = sum + 2u16.pow(PARAMETER_W as u32) - 1 - u16::from(coef(msg_hash, i, PARAMETER_W));
     }
-    sum << PARAMETER_LS
+    sum << (PARAMETER_LS as u16)
 }
 
 /// Generate a public key from private entropy `privkey`.
@@ -162,19 +115,19 @@ fn checksum(msg_hash: &[u8]) -> u16 {
 ///
 /// # Returns
 ///
-/// This function returns the generated public key `Ok(())` on success, or an
-/// `Error(InvalidLengthError)` if `privkey` is of incorrect length.
-pub fn derive_pubkey(privkey: &[u8], pubkey: &mut [u8]) -> Result<(), InvalidLengthError> {
+/// This function returns the generated public key `Ok(())` on success, or an `Err` if `privkey` is
+/// of incorrect length.
+pub fn derive_pubkey(privkey: &[u8], pubkey: &mut [u8]) -> Result<(), &'static str> {
     // This is defined in §3.5.
 
     assert!(PARAMETER_N >= PARAMETER_M);
 
     if privkey.len() != PRIVKEY_SIZE {
-        return Err(InvalidLengthError::new("privkey", PRIVKEY_SIZE, privkey.len()));
+        Err("privkey is of incorrect length")?;
     }
 
     if pubkey.len() != PUBKEY_SIZE {
-        return Err(InvalidLengthError::new("pubkey", PUBKEY_SIZE, pubkey.len()));
+        Err("pubkey is of incorrect length")?;
     }
 
     let mut inner_hasher = PARAMETER_F::new();
@@ -222,14 +175,14 @@ pub fn derive_pubkey(privkey: &[u8], pubkey: &mut [u8]) -> Result<(), InvalidLen
 ///
 /// # Returns
 ///
-/// This function returns the signature `Ok(())` on success, or an `Error(InvalidLengthError)`
-/// if `privkey` is of an incorrect length.
-pub fn sign(privkey: &[u8], msg: &[u8], sig: &mut [u8]) -> Result<(), InvalidLengthError> {
+/// This function returns the signature `Ok(())` on success, or an `Err` if `privkey` or `sig` is of
+/// an incorrect length.
+pub fn sign(privkey: &[u8], msg: &[u8], sig: &mut [u8]) -> Result<(), &'static str> {
     if privkey.len() != PRIVKEY_SIZE {
-        return Err(InvalidLengthError::new("privkey", PRIVKEY_SIZE, privkey.len()));
+        Err("privkey is of incorrect length")?;
     }
     if sig.len() != SIG_SIZE {
-        return Err(InvalidLengthError::new("sig", SIG_SIZE, sig.len()));
+        Err("sig is of incorrect length")?;
     }
 
     assert!(PARAMETER_N >= PARAMETER_M);
@@ -276,13 +229,13 @@ pub fn sign(privkey: &[u8], msg: &[u8], sig: &mut [u8]) -> Result<(), InvalidLen
 /// # Returns
 ///
 /// This function returns `Ok(true)` if the signature is valid, `Ok(false)` if it is not, or
-/// an `Error(InvalidLengthError)` if `pubkey` or `sig` are of incorrect length.
-pub fn verify(pubkey: &[u8], msg: &[u8], sig: &[u8]) -> Result<bool, InvalidLengthError> {
+/// an `Err` if `pubkey` or `sig` are of incorrect length.
+pub fn verify(pubkey: &[u8], msg: &[u8], sig: &[u8]) -> Result<bool, &'static str> {
     if pubkey.len() != PUBKEY_SIZE {
-        return Err(InvalidLengthError::new("pubkey", PUBKEY_SIZE, pubkey.len()));
+        Err("pubkey is of invalid length")?;
     }
     if sig.len() != SIG_SIZE {
-        return Err(InvalidLengthError::new("sig", SIG_SIZE, pubkey.len()));
+        Err("sig is of invalid length")?;
     }
 
     // V = ( H(message) || C(H(message)) )
@@ -356,13 +309,13 @@ pub mod util {
         }
 
         if bytestr.len() % 2 != 0 {
-            return Err(From::from("invalid bytestr length"));
+            Err("invalid bytestr length")?;
         }
 
         let bs = match &bytestr[0..2] {
             "0x" => {
                 if bytestr.len() < 4 {
-                    return Err(From::from("invalid bytestr"));
+                    Err("invalid bytestr")?;
                 }
                 &bytestr[2..]
             },
