@@ -139,7 +139,7 @@ pub fn derive_pubkey(privkey: &[u8], pubkey: &mut [u8]) -> Result<(), &'static s
     // for ( i = 0; i < p; i = i + 1 ) {
     for x_i in privkey.chunks(PARAMETER_N) {
         let mut y_i = [0; PARAMETER_M];
-        y_i.copy_from_slice(x_i.split_at(PARAMETER_M).0);
+        y_i.copy_from_slice(&x_i[..PARAMETER_M]);
 
         // y[i] = F^e(x[i])
         for _ in 0..e {
@@ -149,7 +149,7 @@ pub fn derive_pubkey(privkey: &[u8], pubkey: &mut [u8]) -> Result<(), &'static s
             inner_hasher.input(&y_i);
             inner_hasher.result(&mut y_i_untruncated);
 
-            y_i.copy_from_slice(y_i_untruncated.split_at(PARAMETER_M).0);
+            y_i.copy_from_slice(&y_i_untruncated[..PARAMETER_M]);
         }
 
         // This corresponds to the y[i] part of H(y[0] || y[1] || ... || y[p-1])
@@ -199,23 +199,20 @@ pub fn sign(privkey: &[u8], msg: &[u8], sig: &mut [u8]) -> Result<(), &'static s
     hasher.input(msg);
     hasher.result(&mut h_m);
     let mut v = [0; PARAMETER_N+2];
-    {
-        let (left, mut right) = v.split_at_mut(PARAMETER_N);
-        left.copy_from_slice(&h_m);
-        right.write_u16::<BigEndian>(checksum(&h_m)).unwrap();
-    }
+    v[..PARAMETER_N].copy_from_slice(&h_m);
+    v.split_at_mut(PARAMETER_N).1.write_u16::<BigEndian>(checksum(&h_m)).unwrap();
 
     let mut hasher = PARAMETER_F::new();
     for ((i, y_i_long), sig_i) in privkey.chunks(PARAMETER_N).enumerate().zip(sig.chunks_mut(PARAMETER_M)) {
         let a = coef(&v, i, PARAMETER_W);
         let mut y_i = [0; PARAMETER_M];
-        y_i.copy_from_slice(y_i_long.split_at(PARAMETER_M).0);
+        y_i.copy_from_slice(&y_i_long[..PARAMETER_M]);
         for _ in 0..a {
             hasher.reset();
             hasher.input(&y_i);
             let mut y_i_long = [0; PARAMETER_N];
             hasher.result(&mut y_i_long);
-            y_i.copy_from_slice(y_i_long.split_at(PARAMETER_M).0);
+            y_i.copy_from_slice(&y_i_long[..PARAMETER_M]);
         }
         sig_i.copy_from_slice(&y_i);
     }
@@ -261,13 +258,13 @@ pub fn verify(pubkey: &[u8], msg: &[u8], sig: &[u8]) -> Result<bool, &'static st
     for (i, z_i_long) in sig.chunks(PARAMETER_M).enumerate() {
         let a = 2u8.pow(PARAMETER_W as u32) - 1 - coef(&v, i, PARAMETER_W);
         let mut z_i = [0; PARAMETER_M];
-        z_i.copy_from_slice(z_i_long.split_at(PARAMETER_M).0);
+        z_i.copy_from_slice(&z_i_long[..PARAMETER_M]);
         for _ in 0..a {
             inner_hasher.reset();
             inner_hasher.input(&z_i);
             let mut z_i_long = [0; PARAMETER_N];
             inner_hasher.result(&mut z_i_long);
-            z_i.copy_from_slice(z_i_long.split_at(PARAMETER_M).0);
+            z_i.copy_from_slice(&z_i_long[..PARAMETER_M]);
         }
         outer_hasher.input(&z_i);
 
