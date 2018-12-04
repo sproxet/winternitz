@@ -1,6 +1,6 @@
 [package]
 name = "winternitz"
-version = "0.1.3"
+version = "0.1.4"
 authors = ["sproxet <sproxet@users.noreply.github.com>"]
 description = "An implementation of Winternitz one-time signatures"
 license = "MIT"
