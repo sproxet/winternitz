@@ -31,7 +31,5 @@ fn main() {
 
 	// Verify a signature.
 	assert!(winternitz::verify(&pubkey, msg, &sig).unwrap());
-
-	Ok(())
 }
 ```
