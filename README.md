@@ -1,8 +1,8 @@
 # winternitz
 
-winternitz is a small crate implementing a quantum-resistant one-time signature
-scheme, the `LDWM_SHA256_M20_W8` variant of LDWM (but not MTS) as described in
-https://tools.ietf.org/html/draft-mcgrew-hash-sigs-02.
+winternitz is a small crate implementing a quantum-resistant one-time signature scheme, the `LDWM_SHA256_M20_W8` variant
+of LDWM (but not MTS) as described in https://tools.ietf.org/html/draft-mcgrew-hash-sigs-02. Unless the `utils` feature
+is enabled, this library does not require the standard library.
 
 ## Usage
 
@@ -31,5 +31,19 @@ fn main() {
 
 	// Verify a signature.
 	assert!(winternitz::verify(&pubkey, msg, &sig).unwrap());
+}
+```
+
+## Utils
+
+If the `utils` feature is enabled, the `util::format_bytes()` and `util::deformat_bytes()` functions are available.
+
+```rust
+extern crate winternitz;
+use winternitz::util::*;
+
+fn main() {
+    assert_eq!(&format_bytes(&[1, 2, 3]), "0x010203");
+    assert_eq!(deformat_bytes("0x010203").unwrap(), vec![1, 2, 3]);
 }
 ```
