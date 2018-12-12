@@ -12,6 +12,9 @@ documentation = "https://github.com/sproxet/winternitz"
 rust-crypto = "^0.2"
 byteorder = "^1.2"
 
+[dev-dependencies]
+rand = "0.6.1"
+
 [features]
 poqua-token = []
 utils = []
