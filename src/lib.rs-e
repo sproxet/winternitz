@@ -14,28 +14,29 @@ use crypto::sha2::Sha256;
 // source, however because of Rust issue #34344, it's not really possible to do this without using
 // a macro, which would have made the code much less clear.
 //
-// the length in bytes of each element of an LDWM signature; parameter m
-const SIG_ELEMENT_LEN: usize = 20;
-// the length in bytes of the result of the hash function; parameter n
-const HASH_OUTPUT_LEN: usize = 32;
-// the Winternitz parameter (1-8, higher being slower verification and smaller signatures); parameter w
-const WINTERNITZ_PARAMETER: usize = 4;
-// the number of `m`-byte string elements that make up the LDWM signature; parameter p
-const NO_SIG_ELEMENTS: usize = 67;
-// the number of left-shift bits used in the checksum function C; parameter ls
-const CS_LEFTSHIFT_BITS: usize = 4;
+// the length in bytes of each element of an LDWM signature
+const PARAMETER_M: usize = 20;
+// the length in bytes of the result of the hash function
+const PARAMETER_N: usize = 32;
+// the Winternitz parameter (1-8, higher being slower verification and smaller signatures)
+const PARAMETER_W: usize = 4;
+// the number of `m`-byte string elements that make up the LDWM signature
+const PARAMETER_P: usize = 67;
+// the number of left-shift bits used in the checksum function C
+const PARAMETER_LS: usize = 4;
 // a collision-resistant hash function implementing `crypto::digest::Digest`
 #[allow(non_camel_case_types)]
-type HasherH = Sha256;
+type PARAMETER_H = Sha256;
 // a one way (preimage resistant) hash function implementing `crypto::digest::Digest`
-type HasherF = Sha256;
+#[allow(non_camel_case_types)]
+type PARAMETER_F = Sha256;
 
 /// The size (in bytes) of a public key
-pub const PUBKEY_SIZE: usize = HASH_OUTPUT_LEN;
+pub const PUBKEY_SIZE: usize = PARAMETER_N;
 /// The size (in bytes) of a private key
-pub const PRIVKEY_SIZE: usize = NO_SIG_ELEMENTS * HASH_OUTPUT_LEN;
+pub const PRIVKEY_SIZE: usize = PARAMETER_P * PARAMETER_N;
 /// The size (in bytes) of a signature
-pub const SIG_SIZE: usize = NO_SIG_ELEMENTS * SIG_ELEMENT_LEN;
+pub const SIG_SIZE: usize = PARAMETER_P * PARAMETER_M;
 
 /// `InvalidLengthError` is raised when an argument to a function is of incorrect length.
 #[derive(Debug)]
@@ -51,8 +52,8 @@ impl InvalidLengthError {
         Self {
             msg: format!("{} was expected to be of length {}, but is actually of length {}", variable_name, expected_length, actual_length),
             variable_name: variable_name.to_owned(),
-            expected_length,
-            actual_length,
+            expected_length: expected_length,
+            actual_length: actual_length,
         }
     }
 
@@ -137,14 +138,14 @@ fn coef(msg: &[u8], index: usize, bitlength: usize) -> u8 {
 /// The checksum algorithm itself is described in §3.6.
 /// This function will panic! if `msg_hash` is not the right length for `H`'s output.
 fn checksum(msg_hash: &[u8]) -> u16 {
-    assert_eq!(msg_hash.len(), HASH_OUTPUT_LEN);
+    assert_eq!(msg_hash.len(), PARAMETER_N);
 
-    let u = 8 * HASH_OUTPUT_LEN / WINTERNITZ_PARAMETER; // ceil is unnecessary because of the assertion
+    let u = 8 * PARAMETER_N / PARAMETER_W; // ceil is unnecessary because of the assertion
     let mut sum = 0;
     for i in 0..u {
-        sum = sum + 2u16.pow(WINTERNITZ_PARAMETER as u32) - 1 - coef(msg_hash, i, WINTERNITZ_PARAMETER) as u16);
+        sum = sum + 2u16.pow(PARAMETER_W as u32) - 1 - u16::from(coef(msg_hash, i, PARAMETER_W));
     }
-    sum << CS_LEFTSHIFT_BITS as u16
+    sum << PARAMETER_LS
 }
 
 /// Generate a public key from private entropy `privkey`.
@@ -161,7 +162,7 @@ fn checksum(msg_hash: &[u8]) -> u16 {
 pub fn derive_pubkey(privkey: &[u8], pubkey: &mut [u8]) -> Result<(), InvalidLengthError> {
     // This is defined in §3.5.
 
-    assert!(HASH_OUTPUT_LEN >= SIG_ELEMENT_LEN);
+    assert!(PARAMETER_N >= PARAMETER_M);
 
     if privkey.len() != PRIVKEY_SIZE {
         return Err(InvalidLengthError::new("privkey", PRIVKEY_SIZE, privkey.len()));
@@ -171,31 +172,30 @@ pub fn derive_pubkey(privkey: &[u8], pubkey: &mut [u8]) -> Result<(), InvalidLen
         return Err(InvalidLengthError::new("pubkey", PUBKEY_SIZE, pubkey.len()));
     }
 
-    let mut inner_hasher = HasherF::new();
-    let mut outer_hasher = HasherH::new();
-    assert!(inner_hasher.output_bytes() >= SIG_ELEMENT_LEN);
-    assert_eq!(outer_hasher.output_bytes(), HASH_OUTPUT_LEN);
+    let mut inner_hasher = PARAMETER_F::new();
+    let mut outer_hasher = PARAMETER_H::new();
+    assert!(inner_hasher.output_bytes() >= PARAMETER_M);
+    assert_eq!(outer_hasher.output_bytes(), PARAMETER_N);
 
-    // e = 2^w-1
-    let hash_iterations = 2u32.pow(WINTERNITZ_PARAMETER as u32) - 1;
+    let e = 2u32.pow(PARAMETER_W as u32) - 1;
     // for ( i = 0; i < p; i = i + 1 ) {
-    for privkey_element in privkey.chunks(HASH_OUTPUT_LEN) {
-        // pubkey_element isn't fully formed until it's fed to outer_hasher
-        let mut pubkey_element = [0; SIG_ELEMENT_LEN];
-        pubkey_element.copy_from_slice(privkey_element.split_at(SIG_ELEMENT_LEN).0);
+    for x_i in privkey.chunks(PARAMETER_N) {
+        let mut y_i = [0; PARAMETER_M];
+        y_i.copy_from_slice(x_i.split_at(PARAMETER_M).0);
 
         // y[i] = F^e(x[i])
-        for _ in 0..hash_iterations {
+        for _ in 0..e {
             inner_hasher.reset();
 
-            let mut untruncated = [0; HASH_OUTPUT_LEN];
-            inner_hasher.input(&pubkey_element);
-            inner_hasher.result(&mut untruncated);
-            pubkey_element.copy_from_slice(&untruncated[..SIG_ELEMENT_LEN]);
+            let mut y_i_untruncated = [0; PARAMETER_N];
+            inner_hasher.input(&y_i);
+            inner_hasher.result(&mut y_i_untruncated);
+
+            y_i.copy_from_slice(y_i_untruncated.split_at(PARAMETER_M).0);
         }
 
         // This corresponds to the y[i] part of H(y[0] || y[1] || ... || y[p-1])
-        outer_hasher.input(&pubkey_element);
+        outer_hasher.input(&y_i);
     }
 
     outer_hasher.result(pubkey);
@@ -227,37 +227,31 @@ pub fn sign(privkey: &[u8], msg: &[u8], sig: &mut [u8]) -> Result<(), InvalidLen
         return Err(InvalidLengthError::new("sig", SIG_SIZE, sig.len()));
     }
 
-    assert!(HASH_OUTPUT_LEN >= SIG_ELEMENT_LEN);
-
-    let mut hash = [0; HASH_OUTPUT_LEN];
-    let mut hasher = HasherH::new();
-    assert_eq!(hasher.output_bytes(), HASH_OUTPUT_LEN);
-    hasher.input(msg);
-    hasher.result(&mut hash);
+    assert!(PARAMETER_N >= PARAMETER_M);
 
     // V = ( H(message) || C(H(message)) )
-    let mut hash_checksum = [0; HASH_OUTPUT_LEN +2];
-    hash_checksum[..HASH_OUTPUT_LEN].copy_from_slice(&hash);
-    hash_checksum[HASH_OUTPUT_LEN..].copy_from_slice(&checksum(&hash).to_be_bytes());
+    let mut h_m = [0; PARAMETER_N];
+    let mut hasher = PARAMETER_H::new();
+    assert_eq!(hasher.output_bytes(), PARAMETER_N);
+    hasher.input(msg);
+    hasher.result(&mut h_m);
+    let mut v = [0; PARAMETER_N+2];
+    v[..PARAMETER_N].copy_from_slice(&h_m);
+    v[PARAMETER_N..].copy_from_slice(&checksum(&h_m).to_be_bytes());
 
-    let mut hasher = HasherF::new();
-    for (i, (privkey_element, sig_element_output)) in
-        privkey.chunks(HASH_OUTPUT_LEN)
-            .zip(sig.chunks_mut(SIG_ELEMENT_LEN))
-            .enumerate() {
-
-        let iterations = coef(&hash_checksum, i, WINTERNITZ_PARAMETER);
-        let mut sig_element = [0; SIG_ELEMENT_LEN];
-        sig_element.copy_from_slice(privkey_element.split_at(SIG_ELEMENT_LEN).0);
-        for _ in 0..iterations {
+    let mut hasher = PARAMETER_F::new();
+    for ((i, y_i_long), sig_i) in privkey.chunks(PARAMETER_N).enumerate().zip(sig.chunks_mut(PARAMETER_M)) {
+        let a = coef(&v, i, PARAMETER_W);
+        let mut y_i = [0; PARAMETER_M];
+        y_i.copy_from_slice(y_i_long.split_at(PARAMETER_M).0);
+        for _ in 0..a {
             hasher.reset();
-            hasher.input(&sig_element);
-            let mut untruncated = [0; HASH_OUTPUT_LEN];
-            hasher.result(&mut untruncated);
-            sig_element.copy_from_slice(&untruncated[..SIG_ELEMENT_LEN]);
+            hasher.input(&y_i);
+            let mut y_i_long = [0; PARAMETER_N];
+            hasher.result(&mut y_i_long);
+            y_i.copy_from_slice(y_i_long.split_at(PARAMETER_M).0);
         }
-
-        sig_element_output.copy_from_slice(&sig_element);
+        sig_i.copy_from_slice(&y_i);
     }
 
     Ok(())
@@ -267,9 +261,9 @@ pub fn sign(privkey: &[u8], msg: &[u8], sig: &mut [u8]) -> Result<(), InvalidLen
 ///
 /// # Arguments
 ///
-/// * `pubkey` is a public key of length `HASH_OUTPUT_LEN`
+/// * `pubkey` is a public key of length `PARAMETER_N`
 /// * `msg` is the message to be verified. It may be of any length.
-/// * `sig` is the signature. It must be of length `SIG_SIZE`.
+/// * `sig` is the signature. It must be of length `PARAMETER_P * PARAMETER_N`.
 ///
 /// # Returns
 ///
@@ -283,34 +277,33 @@ pub fn verify(pubkey: &[u8], msg: &[u8], sig: &[u8]) -> Result<bool, InvalidLeng
         return Err(InvalidLengthError::new("sig", SIG_SIZE, pubkey.len()));
     }
 
-    let mut hash_msg = [0; HASH_OUTPUT_LEN];
-    let mut hasher = HasherH::new();
-    assert_eq!(hasher.output_bytes(), HASH_OUTPUT_LEN);
-    hasher.input(msg);
-    hasher.result(&mut hash_msg);
-
     // V = ( H(message) || C(H(message)) )
-    let mut hash_cs = [0; HASH_OUTPUT_LEN +2];
-    hash_cs[..HASH_OUTPUT_LEN].copy_from_slice(&hash_msg);
-    hash_cs[HASH_OUTPUT_LEN..].copy_from_slice(&checksum(&hash_msg).to_be_bytes());
+    let mut h_m = [0; PARAMETER_N];
+    let mut hasher = PARAMETER_H::new();
+    assert_eq!(hasher.output_bytes(), PARAMETER_N);
+    hasher.input(msg);
+    hasher.result(&mut h_m);
+    let mut v = [0; PARAMETER_N+2];
+    v[..PARAMETER_N].copy_from_slice(&h_m);
+    v[PARAMETER_N..].copy_from_slice(&checksum(&h_m).to_be_bytes());
 
-    let mut inner_hasher = HasherF::new();
-    let mut outer_hasher = HasherH::new();
-    for (i, z_i_long) in sig.chunks(SIG_ELEMENT_LEN).enumerate() {
-        let a = 2u8.pow(WINTERNITZ_PARAMETER as u32) - 1 - coef(&hash_cs, i, WINTERNITZ_PARAMETER);
-        let mut z_i = [0; SIG_ELEMENT_LEN];
-        z_i.copy_from_slice(z_i_long.split_at(SIG_ELEMENT_LEN).0);
+    let mut inner_hasher = PARAMETER_F::new();
+    let mut outer_hasher = PARAMETER_H::new();
+    for (i, z_i_long) in sig.chunks(PARAMETER_M).enumerate() {
+        let a = 2u8.pow(PARAMETER_W as u32) - 1 - coef(&v, i, PARAMETER_W);
+        let mut z_i = [0; PARAMETER_M];
+        z_i.copy_from_slice(z_i_long.split_at(PARAMETER_M).0);
         for _ in 0..a {
             inner_hasher.reset();
             inner_hasher.input(&z_i);
-            let mut z_i_long = [0; HASH_OUTPUT_LEN];
+            let mut z_i_long = [0; PARAMETER_N];
             inner_hasher.result(&mut z_i_long);
-            z_i.copy_from_slice(z_i_long.split_at(SIG_ELEMENT_LEN).0);
+            z_i.copy_from_slice(z_i_long.split_at(PARAMETER_M).0);
         }
         outer_hasher.input(&z_i);
     }
 
-    let mut hash = [0; HASH_OUTPUT_LEN];
+    let mut hash = [0; PARAMETER_N];
     outer_hasher.result(&mut hash);
 
     if hash == pubkey {
