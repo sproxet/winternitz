@@ -1,12 +1,7 @@
 // Section numbers refer to https://tools.ietf.org/html/draft-mcgrew-hash-sigs-02
 
-extern crate crypto;
-extern crate byteorder;
-
 use std::error::Error;
 use std::fmt;
-
-use byteorder::{BigEndian, WriteBytesExt};
 
 use crypto::digest::Digest;
 use crypto::sha2::Sha256;
@@ -241,11 +236,8 @@ pub fn sign(privkey: &[u8], msg: &[u8], sig: &mut [u8]) -> Result<(), InvalidLen
     hasher.input(msg);
     hasher.result(&mut h_m);
     let mut v = [0; PARAMETER_N+2];
-    {
-        let (left, mut right) = v.split_at_mut(PARAMETER_N);
-        left.copy_from_slice(&h_m);
-        right.write_u16::<BigEndian>(checksum(&h_m)).unwrap();
-    }
+    v[..PARAMETER_N].copy_from_slice(&h_m);
+    v[PARAMETER_N..].copy_from_slice(&checksum(&h_m).to_be_bytes());
 
     let mut hasher = PARAMETER_F::new();
     for ((i, y_i_long), sig_i) in privkey.chunks(PARAMETER_N).enumerate().zip(sig.chunks_mut(PARAMETER_M)) {
@@ -292,11 +284,8 @@ pub fn verify(pubkey: &[u8], msg: &[u8], sig: &[u8]) -> Result<bool, InvalidLeng
     hasher.input(msg);
     hasher.result(&mut h_m);
     let mut v = [0; PARAMETER_N+2];
-    {
-        let (left, mut right) = v.split_at_mut(PARAMETER_N);
-        left.copy_from_slice(&h_m);
-        right.write_u16::<BigEndian>(checksum(&h_m)).unwrap();
-    }
+    v[..PARAMETER_N].copy_from_slice(&h_m);
+    v[PARAMETER_N..].copy_from_slice(&checksum(&h_m).to_be_bytes());
 
     let mut inner_hasher = PARAMETER_F::new();
     let mut outer_hasher = PARAMETER_H::new();
