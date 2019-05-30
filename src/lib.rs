@@ -457,4 +457,21 @@ mod tests {
         sign(OTS_PRIVKEY_0, MSG, &mut sig).unwrap();
         assert!(verify(&pubkey, MSG, &sig).unwrap());
     }
+
+    #[test]
+    fn test_unsuccessful_verify() {
+        let mut pubkey = [0; PUBKEY_SIZE];
+        derive_pubkey(OTS_PRIVKEY_0, &mut pubkey).unwrap();
+        let mut sig = [0; SIG_SIZE];
+        sign(OTS_PRIVKEY_0, MSG, &mut sig).unwrap();
+
+        let mut bad_sig = sig.clone();
+        bad_sig[0] = bad_sig[0].wrapping_add(1);
+        assert!(!verify(&pubkey, MSG, &bad_sig).unwrap());
+
+        let mut bad_pubkey = pubkey.clone();
+        bad_pubkey[0] = bad_pubkey[0].wrapping_add(1);
+        assert!(!verify(&bad_pubkey, MSG, &sig).unwrap());
+
+    }
 }
