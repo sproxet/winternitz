@@ -33,17 +33,3 @@ fn main() {
 	assert!(winternitz::verify(&pubkey, msg, &sig).unwrap());
 }
 ```
-
-## Utils
-
-If the `utils` feature is enabled, the `util::format_bytes()` and `util::deformat_bytes()` functions are available.
-
-```rust
-extern crate winternitz;
-use winternitz::util::*;
-
-fn main() {
-    assert_eq!(&format_bytes(&[1, 2, 3]), "0x010203");
-    assert_eq!(deformat_bytes("0x010203").unwrap(), vec![1, 2, 3]);
-}
-```
